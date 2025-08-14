@@ -62,30 +62,38 @@ def run_pdftohtmlex(url, first_page="1", last_page = None):
     urllib.request.urlretrieve(url, in_f.name)
     # TODO Check file exists etc.
     
-    # Create output file without extension for pdftohtml
-    out_f  = tempfile.NamedTemporaryFile(delete=False)
-    out_base = out_f.name  # pdftohtml will add .html extension
-    out_f.close()  # Close the temp file so pdftohtml can write to it
+    # output filename by replacing pdf with html
+    out_f  = in_f.name.replace('.pdf', '.html')
     
-    # run process using pdftohtml (poppler-utils) instead of pdf2htmlEX
+    # run process using pdf2htmlEX
     if last_page:
-        cmd = ['pdftohtml', '-f', first_page, '-l', last_page, '-s', '-c', in_f.name, out_base]
+        cmd = ['pdf2htmlEX', '--first-page', first_page, '--last-page', last_page, 
+               in_f.name]
     else:
-        cmd = ['pdftohtml', '-s', '-c', in_f.name, out_base]
-    logging.debug("Running: %s" % cmd )
+        cmd = ['pdf2htmlEX', in_f.name]
+    logging.info("Running pdf2htmlEX command: %s" % ' '.join(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
-    if( out ):
-      logging.debug("pdftohtml STDOUT %s" % out)
-    if( err ):
-      logging.debug("pdftohtml STDERR: %s" % err)
     
-    # pdftohtml with -s option creates filename-html.html, so return that path
-    actual_output = out_base + "-html.html"
+    logging.info("pdf2htmlEX return code: %s" % p.returncode)
+    if out:
+        logging.info("pdf2htmlEX STDOUT: %s" % out.decode('utf-8', errors='ignore'))
+    if err:
+        logging.error("pdf2htmlEX STDERR: %s" % err.decode('utf-8', errors='ignore'))
+    
+    # Check if output file was created and has content
+    if os.path.exists(out_f.name):
+        file_size = os.path.getsize(out_f.name)
+        logging.info("Output file created: %s (size: %d bytes)" % (out_f.name, file_size))
+        if file_size == 0:
+            logging.error("Output file is empty!")
+    else:
+        logging.error("Output file was not created: %s" % out_f.name)
+    
     # Clean up input file
     os.unlink(in_f.name)
     
-    return actual_output
+    return out_f.name
 
 
 @app.route('/convert')
@@ -116,30 +124,38 @@ def run_pdftohtmlex_from_data(pdf_data, first_page="1", last_page = None):
     in_f.write(pdf_data)
     in_f.close()
     
-    # Create output file without extension for pdftohtml
-    out_f  = tempfile.NamedTemporaryFile(delete=False)
-    out_base = out_f.name  # pdftohtml will add .html extension
-    out_f.close()  # Close the temp file so pdftohtml can write to it
+    # Create output file for pdf2htmlEX (without .html suffix as pdf2htmlEX doesn't add it)
+    out_f  = in_f.name.replace('.pdf', '.html').replace('/tmp/', '/pdf/')
     
-    # run process using pdftohtml (poppler-utils) instead of pdf2htmlEX
+    # run process using pdf2htmlEX
     if last_page:
-        cmd = ['pdftohtml', '-f', first_page, '-l', last_page, '-s', '-c', in_f.name, out_base]
+        cmd = ['pdf2htmlEX', '--first-page', first_page, '--last-page', last_page,
+               in_f.name]
     else:
-        cmd = ['pdftohtml', '-s', '-c', in_f.name, out_base]
-    logging.debug("Running: %s" % cmd )
+        cmd = ['pdf2htmlEX', in_f.name]
+    logging.info("Running pdf2htmlEX command: %s" % ' '.join(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
-    if( out ):
-      logging.debug("pdftohtml STDOUT %s" % out)
-    if( err ):
-      logging.debug("pdftohtml STDERR: %s" % err)
+    
+    logging.info("pdf2htmlEX return code: %s" % p.returncode)
+    if out:
+        logging.info("pdf2htmlEX STDOUT: %s" % out.decode('utf-8', errors='ignore'))
+    if err:
+        logging.error("pdf2htmlEX STDERR: %s" % err.decode('utf-8', errors='ignore'))
+    
+    # Check if output file was created and has content
+    if os.path.exists(out_f):
+        file_size = os.path.getsize(out_f)
+        logging.info("Output file created: %s (size: %d bytes)" % (out_f, file_size))
+        if file_size == 0:
+            logging.error("Output file is empty!")
+    else:
+        logging.error("Output file was not created: %s" % out_f)
     
     # Clean up input file
     os.unlink(in_f.name)
     
-    # pdftohtml with -s option creates filename-html.html, so return that path
-    actual_output = out_base + "-html.html"
-    return actual_output
+    return out_f
 
 @app.route('/test-db/<user_id>')
 def test_db(user_id):
@@ -177,7 +193,13 @@ def convert_resume(user_id):
             .execute()
         
         # Log the response for debugging
+        logging.info("Supabase query executed for user_id: %s" % user_id)
         logging.info("Supabase response data count: %s" % len(response.data if response.data else []))
+        if response.data:
+            logging.info("First document info: filename=%s, has_file_data=%s, file_data_length=%s" % 
+                        (response.data[0].get('filename', 'N/A'), 
+                         bool(response.data[0].get('file_data')),
+                         len(response.data[0].get('file_data', '')) if response.data[0].get('file_data') else 0))
         
         # Check if any document was found
         if not response.data or len(response.data) == 0:
@@ -194,11 +216,16 @@ def convert_resume(user_id):
         try:
             # Remove data URL prefix if present
             file_data = document['file_data']
+            logging.info("File data starts with: %s... (total length: %d)" % 
+                        (file_data[:50] if len(file_data) > 50 else file_data, len(file_data)))
+            
             if file_data.startswith('data:'):
                 # Extract base64 part from data URL
+                logging.info("Removing data URL prefix")
                 file_data = file_data.split(',', 1)[1]
             
             pdf_data = base64.b64decode(file_data)
+            logging.info("Successfully decoded PDF data, size: %d bytes" % len(pdf_data))
         except Exception as e:
             logging.error("Error decoding base64: %s" % str(e))
             return jsonify({"error": "Invalid PDF data format"}), 400
@@ -207,12 +234,17 @@ def convert_resume(user_id):
         first_page = request.args.get('first_page')
         last_page = request.args.get('last_page')
         
+        logging.info("Starting PDF to HTML conversion (first_page=%s, last_page=%s)" % 
+                    (first_page or 'all', last_page or 'all'))
+        
         if last_page:
             if not first_page:
                 first_page = "1"
             result = run_pdftohtmlex_from_data(pdf_data, first_page, last_page)
         else:
             result = run_pdftohtmlex_from_data(pdf_data)
+        
+        logging.info("Conversion complete, result file: %s" % result)
         
         # Return the HTML file
         filename = document.get('filename', 'resume.html')
