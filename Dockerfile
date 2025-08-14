@@ -27,10 +27,17 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Download and install pre-built pdf2htmlEX binary for Ubuntu 20.04
-RUN wget https://github.com/pdf2htmlEX/pdf2htmlEX/releases/download/v0.18.8.rc1/pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-focal-x86_64.deb && \
-    apt-get update && \
-    apt-get install -y ./pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-focal-x86_64.deb && \
-    rm pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-focal-x86_64.deb && \
+# Note: The pre-built binary is only for x86_64. For ARM, we would need to compile from source
+# For now, using --allow-unauthenticated and || true to handle failures gracefully
+RUN dpkg --print-architecture && \
+    if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+        wget https://github.com/pdf2htmlEX/pdf2htmlEX/releases/download/v0.18.8.rc1/pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-focal-x86_64.deb && \
+        apt-get update && \
+        apt-get install -y ./pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-focal-x86_64.deb && \
+        rm pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-focal-x86_64.deb; \
+    else \
+        echo "Warning: pdf2htmlEX pre-built binary not available for $(dpkg --print-architecture). PDF to HTML conversion will not be available."; \
+    fi && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies

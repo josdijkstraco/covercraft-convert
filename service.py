@@ -70,7 +70,7 @@ def run_pdftohtmlex(url, first_page="1", last_page = None):
         cmd = ['pdf2htmlEX', '--first-page', first_page, '--last-page', last_page, 
                in_f.name]
     else:
-        cmd = ['pdf2htmlEX', in_f.name]
+        cmd = ['pdf2htmlEX', '--process-outline', '0', '--embed-outline', '0', '--embed-javascript', '1', in_f.name]
     logging.info("Running pdf2htmlEX command: %s" % ' '.join(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
@@ -132,7 +132,7 @@ def run_pdftohtmlex_from_data(pdf_data, first_page="1", last_page = None):
         cmd = ['pdf2htmlEX', '--first-page', first_page, '--last-page', last_page,
                in_f.name]
     else:
-        cmd = ['pdf2htmlEX', in_f.name]
+        cmd = ['pdf2htmlEX', '--process-outline', '0', '--embed-outline', '0', '--embed-javascript', '1', in_f.name]
     logging.info("Running pdf2htmlEX command: %s" % ' '.join(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()

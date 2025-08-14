@@ -1,0 +1,5 @@
+
+docker build --platform linux/amd64 -t ukwa/pdf2htmlex
+docker run --rm -p 8080:8080 ukwa/pdf2htmlex
+
+curl http://localhost:8080/resume/ad11682b-c4ad-415a-a634-f56eabb0fc2e
